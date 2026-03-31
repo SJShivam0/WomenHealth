@@ -15,7 +15,7 @@ else:
     groq_key = st.text_input("Enter your Groq API Key", type="password")
 
 if not groq_key:
-    st.error("Groq API key is required for AI features.")
+    st.error("Groq API key is required.")
     st.stop()
 
 groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_key)
@@ -24,13 +24,12 @@ groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_key
 conn = sqlite3.connect("app.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Drop and recreate tables (safe during development/updates)
 cursor.execute("DROP TABLE IF EXISTS users")
 cursor.execute("DROP TABLE IF EXISTS cycle_data")
 cursor.execute("DROP TABLE IF EXISTS mood_data")
 
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE users (
         email TEXT PRIMARY KEY,
         password TEXT,
         full_name TEXT,
@@ -39,7 +38,7 @@ cursor.execute("""
 """)
 
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS cycle_data (
+    CREATE TABLE cycle_data (
         email TEXT PRIMARY KEY,
         last_period TEXT,
         cycle_length INTEGER,
@@ -49,7 +48,7 @@ cursor.execute("""
 """)
 
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS mood_data (
+    CREATE TABLE mood_data (
         email TEXT,
         date TEXT,
         mood TEXT,
@@ -170,25 +169,6 @@ def show_login():
         else:
             st.error("Email and Password are required")
 
-# ===================== ADMIN DASHBOARD =====================
-def show_admin_dashboard():
-    st.title("🔐 Admin Dashboard")
-    st.subheader("All Users")
-
-    cursor.execute("SELECT email, full_name, is_partner FROM users")
-    for u in cursor.fetchall():
-        st.write(f"**{u[1] or u[0]}** ({u[0]}) | Partner: {'Yes' if u[2] else 'No'}")
-
-    cursor.execute("SELECT * FROM cycle_data")
-    data = cursor.fetchall()
-    if data:
-        df = pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"])
-        st.dataframe(df, use_container_width=True)
-
-    if st.button("Back"):
-        st.session_state.page = "dashboard"
-        st.rerun()
-
 # ===================== DASHBOARD =====================
 def show_dashboard():
     email = st.session_state.user
@@ -219,13 +199,13 @@ def show_dashboard():
             if last_date_input:
                 save_cycle(email, last_date_input, int(cycle_length), int(age), health_notes)
                 st.success("✅ Information saved successfully!")
-                st.rerun()
+                st.rerun()          # This is the key line
 
     if not memory:
         st.info("👉 Please fill your information from the sidebar and click **Save Information**.")
         st.stop()
 
-    # Show tabs only when data exists
+    # Show tabs
     cycle_day = get_cycle_day(memory["last_period_date"], memory["cycle_length"])
     phase = get_phase(cycle_day)
     next_period = predict_next_period(memory["last_period_date"], memory["cycle_length"])
@@ -248,9 +228,8 @@ def show_dashboard():
     if is_partner:
         with tab2:
             st.subheader("💡 How You Can Support Her")
-            context = f"She is on cycle day {cycle_day} in {phase} phase."
             with st.spinner("AI thinking..."):
-                advice = generate_ai_response(context)
+                advice = generate_ai_response(f"She is on cycle day {cycle_day} in {phase} phase.")
             st.markdown(advice)
     else:
         with tab2:
@@ -263,9 +242,8 @@ def show_dashboard():
 
         with tab3:
             st.subheader("🤖 Today's AI Coach")
-            context = f"User is on cycle day {cycle_day} in {phase} phase."
             with st.spinner("AI thinking..."):
-                coach = generate_ai_response(context)
+                coach = generate_ai_response(f"User is on cycle day {cycle_day} in {phase} phase.")
             st.markdown(coach)
 
         with tab4:
@@ -273,9 +251,8 @@ def show_dashboard():
             question = st.text_area("Ask about diet, symptoms, cramps, energy, mood, etc.")
             if st.button("Get Answer"):
                 if question:
-                    prompt = f"Day {cycle_day} ({phase}). Question: {question}"
                     with st.spinner("Thinking..."):
-                        answer = generate_ai_response(prompt)
+                        answer = generate_ai_response(question)
                     st.markdown(answer)
 
     st.caption("⚠️ This is not medical advice.")
@@ -283,7 +260,5 @@ def show_dashboard():
 # ===================== MAIN =====================
 if st.session_state.user is None:
     show_login()
-elif st.session_state.user == "admin@example.com":
-    show_admin_dashboard()
 else:
     show_dashboard()
