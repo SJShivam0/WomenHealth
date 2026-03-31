@@ -20,17 +20,13 @@ if not groq_key:
 
 groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_key)
 
-# ===================== DATABASE =====================
-conn = sqlite3.connect("app.db", check_same_thread=False)
+# ===================== DATABASE - Connect to existing 'app' file =====================
+conn = sqlite3.connect("app", check_same_thread=False)   # <--- Changed here (no .db)
 cursor = conn.cursor()
 
-# Drop and recreate tables
-cursor.execute("DROP TABLE IF EXISTS users")
-cursor.execute("DROP TABLE IF EXISTS cycle_data")
-cursor.execute("DROP TABLE IF EXISTS mood_data")
-
+# Create tables if they don't exist (safe)
 cursor.execute("""
-    CREATE TABLE users (
+    CREATE TABLE IF NOT EXISTS users (
         email TEXT PRIMARY KEY,
         password TEXT,
         full_name TEXT,
@@ -39,7 +35,7 @@ cursor.execute("""
 """)
 
 cursor.execute("""
-    CREATE TABLE cycle_data (
+    CREATE TABLE IF NOT EXISTS cycle_data (
         email TEXT PRIMARY KEY,
         last_period TEXT,
         cycle_length INTEGER,
@@ -49,7 +45,7 @@ cursor.execute("""
 """)
 
 cursor.execute("""
-    CREATE TABLE mood_data (
+    CREATE TABLE IF NOT EXISTS mood_data (
         email TEXT,
         date TEXT,
         mood TEXT,
@@ -109,8 +105,6 @@ def save_cycle(email, last_date, cycle_length, age, health_notes):
     cursor.execute("INSERT OR REPLACE INTO cycle_data VALUES (?, ?, ?, ?, ?)",
                    (email, last_date.strftime("%Y-%m-%d"), cycle_length, age, health_notes))
     conn.commit()
-    st.success("✅ Information saved successfully!")
-    st.rerun()
 
 mood_map = {"😊 Happy": 5, "😐 Neutral": 3, "😔 Low": 2, "😡 Irritated": 1, "😴 Tired": 2}
 
@@ -201,13 +195,13 @@ def show_dashboard():
         if st.button("💾 Save Information", type="primary"):
             if last_date_input:
                 save_cycle(email, last_date_input, int(cycle_length), int(age), health_notes)
-                # No extra rerun here - save_cycle already has st.rerun()
+                st.success("✅ Information saved successfully!")
+                st.rerun()
 
     if not memory:
         st.info("👉 Please fill your information from the sidebar and click **Save Information**.")
         st.stop()
 
-    # Show the tabs
     cycle_day = get_cycle_day(memory["last_period_date"], memory["cycle_length"])
     phase = get_phase(cycle_day)
     next_period = predict_next_period(memory["last_period_date"], memory["cycle_length"])
