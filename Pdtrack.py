@@ -20,11 +20,11 @@ if not groq_key:
 
 groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_key)
 
-# ===================== DATABASE - Connect to existing 'app' file =====================
-conn = sqlite3.connect("app", check_same_thread=False)   # <--- Changed here (no .db)
+# ===================== DATABASE - Connect to your existing 'app' file =====================
+conn = sqlite3.connect("app", check_same_thread=False)
 cursor = conn.cursor()
 
-# Create tables if they don't exist (safe)
+# Create tables if they don't exist
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         email TEXT PRIMARY KEY,
@@ -196,12 +196,13 @@ def show_dashboard():
             if last_date_input:
                 save_cycle(email, last_date_input, int(cycle_length), int(age), health_notes)
                 st.success("✅ Information saved successfully!")
-                st.rerun()
+                st.rerun()   # Important: Force reload
 
     if not memory:
         st.info("👉 Please fill your information from the sidebar and click **Save Information**.")
         st.stop()
 
+    # Show tabs only when data is saved
     cycle_day = get_cycle_day(memory["last_period_date"], memory["cycle_length"])
     phase = get_phase(cycle_day)
     next_period = predict_next_period(memory["last_period_date"], memory["cycle_length"])
