@@ -7,14 +7,22 @@ from openai import OpenAI
 
 st.set_page_config(page_title="🌸 Women's Health AI", layout="centered", page_icon="🌸")
 
-# ===================== GROQ SETUP =====================
-groq_key = st.text_input("Enter your Groq API Key", type="password", help="Get it from https://console.groq.com/keys")
+# ===================== GROQ SETUP - Works on Cloud + Local =====================
+if "GROQ" in st.secrets:
+    groq_key = st.secrets["GROQ"]["API_KEY"]
+    st.success("✅ Groq API key loaded from Secrets")
+else:
+    groq_key = st.text_input("Enter your Groq API Key", type="password", help="Get it from https://console.groq.com/keys")
 
 if not groq_key:
-    st.warning("Please enter your Groq API key above to enable AI features.")
+    st.error("Groq API key is required for AI features.")
     groq_client = None
+    st.stop()
 else:
-    groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_key)
+    groq_client = OpenAI(
+        base_url="https://api.groq.com/openai/v1",
+        api_key=groq_key
+    )
 
 # ===================== DATABASE - Recreate with new structure =====================
 conn = sqlite3.connect("app.db", check_same_thread=False)
