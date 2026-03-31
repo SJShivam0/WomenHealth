@@ -24,6 +24,7 @@ groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_key
 conn = sqlite3.connect("app.db", check_same_thread=False)
 cursor = conn.cursor()
 
+# Drop and recreate tables
 cursor.execute("DROP TABLE IF EXISTS users")
 cursor.execute("DROP TABLE IF EXISTS cycle_data")
 cursor.execute("DROP TABLE IF EXISTS mood_data")
@@ -108,6 +109,8 @@ def save_cycle(email, last_date, cycle_length, age, health_notes):
     cursor.execute("INSERT OR REPLACE INTO cycle_data VALUES (?, ?, ?, ?, ?)",
                    (email, last_date.strftime("%Y-%m-%d"), cycle_length, age, health_notes))
     conn.commit()
+    st.success("✅ Information saved successfully!")
+    st.rerun()
 
 mood_map = {"😊 Happy": 5, "😐 Neutral": 3, "😔 Low": 2, "😡 Irritated": 1, "😴 Tired": 2}
 
@@ -198,14 +201,13 @@ def show_dashboard():
         if st.button("💾 Save Information", type="primary"):
             if last_date_input:
                 save_cycle(email, last_date_input, int(cycle_length), int(age), health_notes)
-                st.success("✅ Information saved successfully!")
-                st.rerun()          # This is the key line
+                # No extra rerun here - save_cycle already has st.rerun()
 
     if not memory:
         st.info("👉 Please fill your information from the sidebar and click **Save Information**.")
         st.stop()
 
-    # Show tabs
+    # Show the tabs
     cycle_day = get_cycle_day(memory["last_period_date"], memory["cycle_length"])
     phase = get_phase(cycle_day)
     next_period = predict_next_period(memory["last_period_date"], memory["cycle_length"])
