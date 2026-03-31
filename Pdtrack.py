@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 from datetime import datetime, timedelta, date
 import pandas as pd
+import json
 from openai import OpenAI
 
 st.set_page_config(page_title="🌸 Women's Health AI", layout="centered", page_icon="🌸")
@@ -15,13 +16,17 @@ if not groq_key:
 else:
     groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_key)
 
-# ===================== DATABASE =====================
+# ===================== DATABASE - Recreate with new structure =====================
 conn = sqlite3.connect("app.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Updated users table with email as primary key
+# Drop old tables to fix column errors
+cursor.execute("DROP TABLE IF EXISTS users")
+cursor.execute("DROP TABLE IF EXISTS cycle_data")
+cursor.execute("DROP TABLE IF EXISTS mood_data")
+
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE users (
         email TEXT PRIMARY KEY,
         password TEXT,
         full_name TEXT,
@@ -30,7 +35,7 @@ cursor.execute("""
 """)
 
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS cycle_data (
+    CREATE TABLE cycle_data (
         email TEXT PRIMARY KEY,
         last_period TEXT,
         cycle_length INTEGER,
@@ -40,7 +45,7 @@ cursor.execute("""
 """)
 
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS mood_data (
+    CREATE TABLE mood_data (
         email TEXT,
         date TEXT,
         mood TEXT,
@@ -54,7 +59,7 @@ conn.commit()
 
 # ===================== SESSION =====================
 if 'user' not in st.session_state:
-    st.session_state.user = None   # This will store email now
+    st.session_state.user = None
 if 'full_name' not in st.session_state:
     st.session_state.full_name = None
 if 'is_partner' not in st.session_state:
@@ -137,12 +142,10 @@ def show_login():
 
     if st.button("🚀 Login / Register", type="primary"):
         if email and password:
-            # Check if email already exists
             cursor.execute("SELECT password, full_name, is_partner FROM users WHERE email=?", (email,))
             existing = cursor.fetchone()
 
             if existing:
-                # Login
                 saved_password, saved_name, is_partner = existing
                 if saved_password == password:
                     st.session_state.user = email
@@ -154,7 +157,6 @@ def show_login():
                 else:
                     st.error("Incorrect password")
             else:
-                # Register new user
                 is_partner = 1 if "Partner" in mode else 0
                 cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?)", 
                              (email, password, full_name, is_partner))
@@ -170,8 +172,7 @@ def show_login():
 
 # ===================== ADMIN DASHBOARD =====================
 def show_admin_dashboard():
-    st.title("🔐 Admin Dashboard")
-    st.subheader("All Users")
+    st.title("🔐 Admin Dashboard - All Customers")
 
     cursor.execute("SELECT email, full_name, is_partner FROM users")
     users = cursor.fetchall()
@@ -183,8 +184,10 @@ def show_admin_dashboard():
     if data:
         df = pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"])
         st.dataframe(df, use_container_width=True)
+    else:
+        st.info("No cycle data yet.")
 
-    if st.button("Back"):
+    if st.button("Back to App"):
         st.session_state.page = "dashboard"
         st.rerun()
 
@@ -194,7 +197,7 @@ def show_dashboard():
     full_name = st.session_state.full_name
     is_partner = st.session_state.is_partner
 
-    if email and email.lower() == "admin@example.com":   # You can change this
+    if email and email.lower() == "admin@example.com":
         if st.sidebar.button("🔐 Open Admin Dashboard"):
             st.session_state.page = "admin"
             st.rerun()
@@ -214,7 +217,8 @@ def show_dashboard():
                                         value=None if not memory else datetime.strptime(memory.get("last_period_date", ""), "%Y-%m-%d").date(),
                                         max_value=today())
         
-        cycle_length = st.number_input("Average Cycle Length (days)", 20, 45, value=memory.get("cycle_length", 28) if memory else 28)
+        cycle_length = st.number_input("Average Cycle Length (days)", 20, 45, 
+                                       value=memory.get("cycle_length", 28) if memory else 28)
         age = st.number_input("Your Age", 13, 60, value=memory.get("age", 25) if memory else 25)
         health_notes = st.text_area("Health History / Important Events", 
                                     value=memory.get("health_notes", "") if memory else "",
@@ -227,7 +231,7 @@ def show_dashboard():
                 st.rerun()
 
     if not memory:
-        st.info("👉 Please fill your cycle information from the sidebar and click **Save Information**.")
+        st.info("👉 Please fill your information from the sidebar and click **Save Information**.")
         st.stop()
 
     cycle_day = get_cycle_day(memory["last_period_date"], memory["cycle_length"])
