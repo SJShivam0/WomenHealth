@@ -185,7 +185,7 @@ def show_login():
         admin_password = st.text_input("Admin Password", type="password", key="admin_password")
 
         if st.button("Login as Admin"):
-            if admin_email == "admin@yourapp.com" and admin_password == "admin12345":   # ← Change this password!
+            if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":   # ← Change this password!
                 st.session_state.user = admin_email
                 st.session_state.full_name = "Admin"
                 st.session_state.is_admin = True
