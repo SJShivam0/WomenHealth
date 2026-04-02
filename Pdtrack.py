@@ -63,6 +63,8 @@ if 'full_name' not in st.session_state:
     st.session_state.full_name = None
 if 'is_partner' not in st.session_state:
     st.session_state.is_partner = False
+if 'is_admin' not in st.session_state:
+    st.session_state.is_admin = False
 
 # ===================== HELPERS (same as before) =====================
 def today():
@@ -126,68 +128,83 @@ def generate_ai_response(prompt):
 def show_login():
     st.title("🌸 Women's Health AI")
 
-    full_name = st.text_input("Full Name (optional)")
-    email = st.text_input("Email Address")
-    password = st.text_input("Password", type="password")
-    mode = st.radio("I am:", ["Tracking my own cycle", "Partner (Boyfriend/Husband)"], horizontal=True)
+    col1, col2 = st.columns(2)
 
-    if st.button("🚀 Login / Register", type="primary"):
-        if email and password:
-            cursor.execute("SELECT password, full_name, is_partner FROM users WHERE email=?", (email,))
-            existing = cursor.fetchone()
+    with col1:
+        st.subheader("User Login")
+        full_name = st.text_input("Full Name (optional)", key="user_name")
+        email = st.text_input("Email Address", key="user_email")
+        password = st.text_input("Password", type="password", key="user_pass")
+        mode = st.radio("I am:", ["Tracking my own cycle", "Partner"], horizontal=True, key="user_mode")
 
-            if existing:
-                saved_password, saved_name, is_partner = existing
-                if saved_password == password:
+        if st.button("🚀 Login / Register as User", type="primary"):
+            if email and password:
+                cursor.execute("SELECT password, full_name, is_partner FROM users WHERE email=?", (email,))
+                existing = cursor.fetchone()
+
+                if existing:
+                    saved_password, saved_name, is_partner = existing
+                    if saved_password == password:
+                        st.session_state.user = email
+                        st.session_state.full_name = saved_name or email.split('@')[0]
+                        st.session_state.is_partner = bool(is_partner)
+                        st.session_state.is_admin = False
+                        st.success(f"Welcome back, {st.session_state.full_name}!")
+                        st.session_state.page = "dashboard"
+                        st.rerun()
+                    else:
+                        st.error("Incorrect password")
+                else:
+                    is_partner = 1 if mode == "Partner" else 0
+                    cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (email, password, full_name, is_partner))
+                    conn.commit()
                     st.session_state.user = email
-                    st.session_state.full_name = saved_name or email.split('@')[0]
+                    st.session_state.full_name = full_name or email.split('@')[0]
                     st.session_state.is_partner = bool(is_partner)
-                    st.success(f"Welcome back, {st.session_state.full_name}!")
+                    st.session_state.is_admin = False
+                    st.success(f"Welcome, {st.session_state.full_name}!")
                     st.session_state.page = "dashboard"
                     st.rerun()
-                else:
-                    st.error("Incorrect password")
             else:
-                is_partner = 1 if "Partner" in mode else 0
-                cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (email, password, full_name, is_partner))
-                conn.commit()
-                st.session_state.user = email
-                st.session_state.full_name = full_name or email.split('@')[0]
-                st.session_state.is_partner = bool(is_partner)
-                st.success(f"Welcome, {st.session_state.full_name}!")
-                st.session_state.page = "dashboard"
-                st.rerun()
-        else:
-            st.error("Email and Password are required")
+                st.error("Email and Password are required")
 
-# ===================== ADMIN VIEW (Protected) =====================
+    with col2:
+        st.subheader("Admin Login")
+        admin_email = st.text_input("Admin Email", value="admin@yourapp.com")
+        admin_password = st.text_input("Admin Password", type="password", key="admin_pass")
+
+        if st.button("🔐 Login as Admin"):
+            # Simple secure check - change these values
+            if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":
+                st.session_state.user = admin_email
+                st.session_state.full_name = "Admin"
+                st.session_state.is_admin = True
+                st.success("Admin Login Successful!")
+                st.session_state.page = "admin"
+                st.rerun()
+            else:
+                st.error("Incorrect Admin credentials")
+
+# ===================== ADMIN VIEW =====================
 def show_admin_view():
     st.title("🔐 Admin Dashboard - All User Data")
 
-    # Simple password protection for admin
-    admin_pass = st.text_input("Enter Admin Password", type="password")
-    if st.button("Access Admin Panel"):
-        if admin_pass == "admin123":   # Change this password to something strong
-            st.success("Admin Access Granted")
+    st.subheader("All Registered Users")
+    cursor.execute("SELECT email, full_name, is_partner FROM users")
+    for u in cursor.fetchall():
+        st.write(f"**{u[1] or u[0]}** | {u[0]} | Partner: {'Yes' if u[2] else 'No'}")
 
-            st.subheader("All Users")
-            cursor.execute("SELECT email, full_name, is_partner FROM users")
-            for u in cursor.fetchall():
-                st.write(f"**{u[1] or u[0]}** | {u[0]} | Partner: {'Yes' if u[2] else 'No'}")
+    st.subheader("All Cycle Data")
+    cursor.execute("SELECT email, last_period, cycle_length, age, health_notes FROM cycle_data")
+    data = cursor.fetchall()
+    if data:
+        df = pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"])
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("No cycle data yet.")
 
-            st.subheader("Cycle Data")
-            cursor.execute("SELECT email, last_period, cycle_length, age, health_notes FROM cycle_data")
-            data = cursor.fetchall()
-            if data:
-                df = pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"])
-                st.dataframe(df, use_container_width=True)
-            else:
-                st.info("No cycle data yet.")
-        else:
-            st.error("Incorrect Admin Password")
-
-    if st.button("Back to Dashboard"):
-        st.session_state.page = "dashboard"
+    if st.button("Back to Login"):
+        st.session_state.clear()
         st.rerun()
 
 # ===================== DASHBOARD =====================
@@ -202,11 +219,6 @@ def show_dashboard():
         st.success(f"Logged in as **{full_name}**")
         if st.button("Logout"):
             st.session_state.clear()
-            st.rerun()
-
-        # Admin Button - Only visible if you want
-        if st.button("🔐 Admin Panel"):
-            st.session_state.page = "admin"
             st.rerun()
 
     memory = load_cycle(email)
@@ -285,7 +297,7 @@ def show_dashboard():
 # ===================== MAIN =====================
 if st.session_state.user is None:
     show_login()
-elif st.session_state.page == "admin":
+elif st.session_state.is_admin:
     show_admin_view()
 else:
     show_dashboard()
