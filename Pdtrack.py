@@ -71,6 +71,8 @@ if 'full_name' not in st.session_state:
     st.session_state.full_name = None
 if 'is_partner' not in st.session_state:
     st.session_state.is_partner = False
+if 'page' not in st.session_state:
+    st.session_state.page = "login"
 
 # ===================== HELPERS =====================
 def today():
@@ -108,8 +110,10 @@ def save_cycle(email, last_date, cycle_length, age, health_notes):
                    (email, last_date.strftime("%Y-%m-%d"), cycle_length, age, health_notes))
     conn.commit()
 
+mood_map = {"😊 Happy": 5, "😐 Neutral": 3, "😔 Low": 2, "😡 Irritated": 1, "😴 Tired": 2}
+
 def save_mood(email, mood, reasons, cycle_day, phase):
-    score = {"😊 Happy": 5, "😐 Neutral": 3, "😔 Low": 2, "😡 Irritated": 1, "😴 Tired": 2}.get(mood, 3)
+    score = mood_map.get(mood, 3)
     today_str = today().strftime("%Y-%m-%d")
     cursor.execute("INSERT INTO mood_data VALUES (?, ?, ?, ?, ?, ?, ?)",
                    (email, today_str, mood, score, cycle_day, phase, json.dumps(reasons or [])))
@@ -133,84 +137,96 @@ def generate_ai_response(prompt):
     except Exception as e:
         return f"⚠️ AI Error: {str(e)}"
 
-# ===================== LOGIN =====================
+# ===================== LOGIN SCREEN =====================
 def show_login():
     st.title("🌸 Women's Health AI")
 
-    full_name = st.text_input("Full Name (optional)")
-    email = st.text_input("Email Address")
-    password = st.text_input("Password", type="password")
-    mode = st.radio("I am:", ["Tracking my own cycle", "Partner (Boyfriend/Husband)"], horizontal=True)
+    col1, col2 = st.columns(2)
 
-    if st.button("🚀 Login / Register", type="primary"):
-        if email and password:
-            cursor.execute("SELECT password, full_name, is_partner FROM users WHERE email=?", (email,))
-            existing = cursor.fetchone()
+    with col1:
+        st.subheader("👤 User Login")
+        full_name = st.text_input("Full Name (optional)", key="user_fullname")
+        email = st.text_input("Email Address", key="user_email")
+        password = st.text_input("Password", type="password", key="user_password")
+        mode = st.radio("I am:", ["Tracking my own cycle", "Partner (Boyfriend/Husband)"], horizontal=True, key="user_mode")
 
-            if existing:
-                saved_password, saved_name, is_partner = existing
-                if saved_password == password:
+        if st.button("🚀 Login / Register as User", type="primary"):
+            if email and password:
+                cursor.execute("SELECT password, full_name, is_partner FROM users WHERE email=?", (email,))
+                existing = cursor.fetchone()
+
+                if existing:
+                    saved_password, saved_name, is_partner = existing
+                    if saved_password == password:
+                        st.session_state.user = email
+                        st.session_state.full_name = saved_name or email.split('@')[0]
+                        st.session_state.is_partner = bool(is_partner)
+                        st.success(f"Welcome back, {st.session_state.full_name}!")
+                        st.session_state.page = "dashboard"
+                        st.rerun()
+                    else:
+                        st.error("Incorrect password")
+                else:
+                    is_partner = 1 if mode == "Partner (Boyfriend/Husband)" else 0
+                    cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (email, password, full_name, is_partner))
+                    conn.commit()
                     st.session_state.user = email
-                    st.session_state.full_name = saved_name or email.split('@')[0]
+                    st.session_state.full_name = full_name or email.split('@')[0]
                     st.session_state.is_partner = bool(is_partner)
-                    st.success(f"Welcome back, {st.session_state.full_name}!")
+                    st.success(f"Welcome, {st.session_state.full_name}!")
                     st.session_state.page = "dashboard"
                     st.rerun()
-                else:
-                    st.error("Incorrect password")
             else:
-                is_partner = 1 if "Partner" in mode else 0
-                cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (email, password, full_name, is_partner))
-                conn.commit()
-                st.session_state.user = email
-                st.session_state.full_name = full_name or email.split('@')[0]
-                st.session_state.is_partner = bool(is_partner)
-                st.success(f"Welcome, {st.session_state.full_name}!")
-                st.session_state.page = "dashboard"
+                st.error("Email and Password are required")
+
+    with col2:
+        st.subheader("🔐 Admin Login")
+        admin_email = st.text_input("Admin Email", value="admin@yourapp.com", key="admin_email")
+        admin_password = st.text_input("Admin Password", type="password", key="admin_password")
+
+        if st.button("Login as Admin"):
+            if admin_email == "admin@yourapp.com" and admin_password == "admin12345":   # ← Change this password!
+                st.session_state.user = admin_email
+                st.session_state.full_name = "Admin"
+                st.session_state.is_admin = True
+                st.success("Admin Login Successful!")
+                st.session_state.page = "admin"
                 st.rerun()
-        else:
-            st.error("Email and Password are required")
+            else:
+                st.error("Incorrect Admin credentials")
 
-# ===================== ADMIN PANEL (Button Triggered) =====================
+# ===================== ADMIN PANEL =====================
 def show_admin_panel():
-    st.title("🔐 Admin Panel")
+    st.title("🔐 Admin Dashboard - All Data")
 
-    admin_email = st.text_input("Admin Email")
-    admin_password = st.text_input("Admin Password", type="password")
+    st.subheader("Registered Users")
+    cursor.execute("SELECT email, full_name, is_partner FROM users")
+    for u in cursor.fetchall():
+        st.write(f"**{u[1] or u[0]}** | {u[0]} | Partner: {'Yes' if u[2] else 'No'}")
 
-    if st.button("Login as Admin"):
-        if admin_email == "admin@yourapp.com" and admin_password == "admin12345":   # Change this!
-            st.success("Admin Access Granted")
-            st.subheader("All Users")
-            cursor.execute("SELECT email, full_name, is_partner FROM users")
-            for u in cursor.fetchall():
-                st.write(f"**{u[1] or u[0]}** | {u[0]}")
+    st.subheader("Cycle Data")
+    cursor.execute("SELECT * FROM cycle_data")
+    data = cursor.fetchall()
+    if data:
+        df = pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"])
+        st.dataframe(df, use_container_width=True)
 
-            st.subheader("Cycle Data")
-            cursor.execute("SELECT * FROM cycle_data")
-            data = cursor.fetchall()
-            if data:
-                df = pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"])
-                st.dataframe(df, use_container_width=True)
+    st.subheader("Mood Logs")
+    cursor.execute("SELECT * FROM mood_data ORDER BY date DESC")
+    mood_data = cursor.fetchall()
+    if mood_data:
+        df_mood = pd.DataFrame(mood_data, columns=["Email", "Date", "Mood", "Score", "Cycle Day", "Phase", "Reasons"])
+        st.dataframe(df_mood, use_container_width=True)
 
-            st.subheader("Mood Logs")
-            cursor.execute("SELECT * FROM mood_data ORDER BY date DESC")
-            mood_data = cursor.fetchall()
-            if mood_data:
-                df_mood = pd.DataFrame(mood_data, columns=["Email", "Date", "Mood", "Score", "Cycle Day", "Phase", "Reasons"])
-                st.dataframe(df_mood, use_container_width=True)
+    st.subheader("AI Queries")
+    cursor.execute("SELECT * FROM ai_queries ORDER BY date DESC")
+    ai_data = cursor.fetchall()
+    if ai_data:
+        df_ai = pd.DataFrame(ai_data, columns=["Email", "Date", "Query"])
+        st.dataframe(df_ai, use_container_width=True)
 
-            st.subheader("AI Queries")
-            cursor.execute("SELECT * FROM ai_queries ORDER BY date DESC")
-            ai_data = cursor.fetchall()
-            if ai_data:
-                df_ai = pd.DataFrame(ai_data, columns=["Email", "Date", "Query"])
-                st.dataframe(df_ai, use_container_width=True)
-        else:
-            st.error("Incorrect Admin credentials")
-
-    if st.button("Back to Dashboard"):
-        st.session_state.page = "dashboard"
+    if st.button("Back to Login"):
+        st.session_state.clear()
         st.rerun()
 
 # ===================== DASHBOARD =====================
@@ -225,10 +241,6 @@ def show_dashboard():
         st.success(f"Logged in as **{full_name}**")
         if st.button("Logout"):
             st.session_state.clear()
-            st.rerun()
-
-        if st.button("🔐 Admin Panel"):
-            st.session_state.page = "admin"
             st.rerun()
 
     memory = load_cycle(email)
@@ -298,7 +310,7 @@ def show_dashboard():
             question = st.text_area("Ask about diet, symptoms, cramps, energy, mood, etc.")
             if st.button("Get Answer"):
                 if question:
-                    save_ai_query(email, question)   # Save what user asked
+                    save_ai_query(email, question)
                     with st.spinner("Thinking..."):
                         answer = generate_ai_response(question)
                     st.markdown(answer)
@@ -306,7 +318,7 @@ def show_dashboard():
     st.caption("⚠️ This is not medical advice.")
 
 # ===================== MAIN =====================
-if st.session_state.user is None:
+if st.session_state.page == "login":
     show_login()
 elif st.session_state.page == "admin":
     show_admin_panel()
