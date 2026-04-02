@@ -140,60 +140,70 @@ def generate_ai_response(prompt):
 # ===================== LOGIN SCREEN =====================
 def show_login():
     st.title("🌸 Women's Health AI")
+    st.markdown("### Track your cycle • Get guidance • Support your partner")
 
-    col1, col2 = st.columns(2)
+    # Admin Button at the top right
+    col1, col2 = st.columns([4, 1])
+    with col2:
+        if st.button("🔐 Admin Login"):
+            st.session_state.page = "admin_login"
+            st.rerun()
 
-    with col1:
-        st.subheader("👤 User Login")
-        full_name = st.text_input("Full Name (optional)", key="user_fullname")
-        email = st.text_input("Email Address", key="user_email")
-        password = st.text_input("Password", type="password", key="user_password")
-        mode = st.radio("I am:", ["Tracking my own cycle", "Partner (Boyfriend/Husband)"], horizontal=True, key="user_mode")
+    # Normal User Login
+    full_name = st.text_input("Full Name (optional)")
+    email = st.text_input("Email Address")
+    password = st.text_input("Password", type="password")
+    mode = st.radio("I am:", ["Tracking my own cycle", "Partner (Boyfriend/Husband)"], horizontal=True)
 
-        if st.button("🚀 Login / Register as User", type="primary"):
-            if email and password:
-                cursor.execute("SELECT password, full_name, is_partner FROM users WHERE email=?", (email,))
-                existing = cursor.fetchone()
+    if st.button("🚀 Login / Register", type="primary"):
+        if email and password:
+            cursor.execute("SELECT password, full_name, is_partner FROM users WHERE email=?", (email,))
+            existing = cursor.fetchone()
 
-                if existing:
-                    saved_password, saved_name, is_partner = existing
-                    if saved_password == password:
-                        st.session_state.user = email
-                        st.session_state.full_name = saved_name or email.split('@')[0]
-                        st.session_state.is_partner = bool(is_partner)
-                        st.success(f"Welcome back, {st.session_state.full_name}!")
-                        st.session_state.page = "dashboard"
-                        st.rerun()
-                    else:
-                        st.error("Incorrect password")
-                else:
-                    is_partner = 1 if mode == "Partner (Boyfriend/Husband)" else 0
-                    cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (email, password, full_name, is_partner))
-                    conn.commit()
+            if existing:
+                saved_password, saved_name, is_partner = existing
+                if saved_password == password:
                     st.session_state.user = email
-                    st.session_state.full_name = full_name or email.split('@')[0]
+                    st.session_state.full_name = saved_name or email.split('@')[0]
                     st.session_state.is_partner = bool(is_partner)
-                    st.success(f"Welcome, {st.session_state.full_name}!")
+                    st.success(f"Welcome back, {st.session_state.full_name}!")
                     st.session_state.page = "dashboard"
                     st.rerun()
+                else:
+                    st.error("Incorrect password")
             else:
-                st.error("Email and Password are required")
-
-    with col2:
-        st.subheader("🔐 Admin Login")
-        admin_email = st.text_input("Admin Email", value="admin@yourapp.com", key="admin_email")
-        admin_password = st.text_input("Admin Password", type="password", key="admin_password")
-
-        if st.button("Login as Admin"):
-            if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":   # ← Change this password!
-                st.session_state.user = admin_email
-                st.session_state.full_name = "Admin"
-                st.session_state.is_admin = True
-                st.success("Admin Login Successful!")
-                st.session_state.page = "admin"
+                is_partner = 1 if mode == "Partner (Boyfriend/Husband)" else 0
+                cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (email, password, full_name, is_partner))
+                conn.commit()
+                st.session_state.user = email
+                st.session_state.full_name = full_name or email.split('@')[0]
+                st.session_state.is_partner = bool(is_partner)
+                st.success(f"Welcome, {st.session_state.full_name}!")
+                st.session_state.page = "dashboard"
                 st.rerun()
-            else:
-                st.error("Incorrect Admin credentials")
+        else:
+            st.error("Email and Password are required")
+
+# ===================== ADMIN LOGIN SCREEN =====================
+def show_admin_login():
+    st.title("🔐 Admin Login")
+
+    admin_email = st.text_input("Admin Email", value="admin@yourapp.com")
+    admin_password = st.text_input("Admin Password", type="password")
+
+    if st.button("Login as Admin"):
+        if admin_email == "admin@yourapp.com" and admin_password == "admin12345":   # Change this password!
+            st.session_state.user = admin_email
+            st.session_state.full_name = "Admin"
+            st.session_state.page = "admin_panel"
+            st.success("Admin Login Successful!")
+            st.rerun()
+        else:
+            st.error("Incorrect Admin credentials")
+
+    if st.button("Back to User Login"):
+        st.session_state.page = "login"
+        st.rerun()
 
 # ===================== ADMIN PANEL =====================
 def show_admin_panel():
@@ -229,7 +239,7 @@ def show_admin_panel():
         st.session_state.clear()
         st.rerun()
 
-# ===================== DASHBOARD =====================
+# ===================== USER DASHBOARD =====================
 def show_dashboard():
     email = st.session_state.user
     full_name = st.session_state.full_name
@@ -320,7 +330,9 @@ def show_dashboard():
 # ===================== MAIN =====================
 if st.session_state.page == "login":
     show_login()
-elif st.session_state.page == "admin":
+elif st.session_state.page == "admin_login":
+    show_admin_login()
+elif st.session_state.page == "admin_panel":
     show_admin_panel()
 else:
     show_dashboard()
