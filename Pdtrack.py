@@ -20,11 +20,10 @@ if not groq_key:
 
 groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_key)
 
-# ===================== DATABASE - Connect to your existing 'app' file =====================
+# ===================== DATABASE =====================
 conn = sqlite3.connect("app", check_same_thread=False)
 cursor = conn.cursor()
 
-# Create tables if they don't exist
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         email TEXT PRIMARY KEY,
@@ -65,7 +64,7 @@ if 'full_name' not in st.session_state:
 if 'is_partner' not in st.session_state:
     st.session_state.is_partner = False
 
-# ===================== HELPERS =====================
+# ===================== HELPERS (same as before) =====================
 def today():
     return datetime.today().date()
 
@@ -93,12 +92,7 @@ def load_cycle(email):
     cursor.execute("SELECT last_period, cycle_length, age, health_notes FROM cycle_data WHERE email=?", (email,))
     row = cursor.fetchone()
     if row:
-        return {
-            "last_period_date": row[0],
-            "cycle_length": row[1],
-            "age": row[2],
-            "health_notes": row[3] or ""
-        }
+        return {"last_period_date": row[0], "cycle_length": row[1], "age": row[2], "health_notes": row[3] or ""}
     return None
 
 def save_cycle(email, last_date, cycle_length, age, health_notes):
@@ -166,6 +160,36 @@ def show_login():
         else:
             st.error("Email and Password are required")
 
+# ===================== ADMIN VIEW (Protected) =====================
+def show_admin_view():
+    st.title("🔐 Admin Dashboard - All User Data")
+
+    # Simple password protection for admin
+    admin_pass = st.text_input("Enter Admin Password", type="password")
+    if st.button("Access Admin Panel"):
+        if admin_pass == "admin123":   # Change this password to something strong
+            st.success("Admin Access Granted")
+
+            st.subheader("All Users")
+            cursor.execute("SELECT email, full_name, is_partner FROM users")
+            for u in cursor.fetchall():
+                st.write(f"**{u[1] or u[0]}** | {u[0]} | Partner: {'Yes' if u[2] else 'No'}")
+
+            st.subheader("Cycle Data")
+            cursor.execute("SELECT email, last_period, cycle_length, age, health_notes FROM cycle_data")
+            data = cursor.fetchall()
+            if data:
+                df = pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"])
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("No cycle data yet.")
+        else:
+            st.error("Incorrect Admin Password")
+
+    if st.button("Back to Dashboard"):
+        st.session_state.page = "dashboard"
+        st.rerun()
+
 # ===================== DASHBOARD =====================
 def show_dashboard():
     email = st.session_state.user
@@ -178,6 +202,11 @@ def show_dashboard():
         st.success(f"Logged in as **{full_name}**")
         if st.button("Logout"):
             st.session_state.clear()
+            st.rerun()
+
+        # Admin Button - Only visible if you want
+        if st.button("🔐 Admin Panel"):
+            st.session_state.page = "admin"
             st.rerun()
 
     memory = load_cycle(email)
@@ -196,13 +225,12 @@ def show_dashboard():
             if last_date_input:
                 save_cycle(email, last_date_input, int(cycle_length), int(age), health_notes)
                 st.success("✅ Information saved successfully!")
-                st.rerun()   # Important: Force reload
+                st.rerun()
 
     if not memory:
         st.info("👉 Please fill your information from the sidebar and click **Save Information**.")
         st.stop()
 
-    # Show tabs only when data is saved
     cycle_day = get_cycle_day(memory["last_period_date"], memory["cycle_length"])
     phase = get_phase(cycle_day)
     next_period = predict_next_period(memory["last_period_date"], memory["cycle_length"])
@@ -257,5 +285,7 @@ def show_dashboard():
 # ===================== MAIN =====================
 if st.session_state.user is None:
     show_login()
+elif st.session_state.page == "admin":
+    show_admin_view()
 else:
     show_dashboard()
