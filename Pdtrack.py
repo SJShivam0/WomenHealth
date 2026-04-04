@@ -83,8 +83,6 @@ if 'page' not in st.session_state:
     st.session_state.page = "login"
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
-if 'ai_coach_answers' not in st.session_state:
-    st.session_state.ai_coach_answers = {}
 
 # ===================== HELPERS =====================
 def today():
@@ -106,13 +104,13 @@ def get_cycle_day(last_date_str, cycle_length):
 
 def get_phase(day):
     if day <= 5:
-        return "Menstrual Phase 🩸"
+        return "Menstrual Phase (Period / Rest Phase) 🩸"
     elif day <= 13:
-        return "Follicular Phase 🌱"
+        return "Follicular Phase (Growth & Energy Phase) 🌱"
     elif day <= 16:
-        return "Ovulation Phase 🌼"
+        return "Ovulation Phase (Fertile Window) 🌼"
     else:
-        return "Luteal Phase 🌙"
+        return "Luteal Phase (Pre-Period Phase) 🌙"
 
 def load_cycle(email):
     cursor.execute("SELECT last_period, cycle_length, age, health_notes FROM cycle_data WHERE email=?", (email,))
@@ -144,7 +142,7 @@ def generate_ai_response(prompt):
     try:
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": "You are a caring, supportive women's health coach. Give practical, personalised advice based on the information provided."},
+            messages=[{"role": "system", "content": "You are a caring, supportive women's health coach. Give practical, warm and personalised advice."},
                       {"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=500
@@ -173,7 +171,6 @@ def show_login():
         if email and password:
             cursor.execute("SELECT password, full_name, is_partner FROM users WHERE email=?", (email,))
             existing = cursor.fetchone()
-
             if existing:
                 saved_password, saved_name, is_partner = existing
                 if saved_password == password:
@@ -203,9 +200,8 @@ def show_admin_login():
     st.title("🔐 Admin Login")
     admin_email = st.text_input("Admin Email", value="admin@yourapp.com")
     admin_password = st.text_input("Admin Password", type="password")
-
     if st.button("Login as Admin"):
-        if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":
+        if admin_email == "shivam@j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":
             st.session_state.user = admin_email
             st.session_state.full_name = "Admin"
             st.session_state.page = "admin_panel"
@@ -213,7 +209,6 @@ def show_admin_login():
             st.rerun()
         else:
             st.error("Incorrect Admin credentials")
-
     if st.button("← Back"):
         st.session_state.page = "login"
         st.rerun()
@@ -225,7 +220,6 @@ def show_admin_panel():
     if data:
         df = pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"])
         st.dataframe(df, use_container_width=True)
-    
     if st.button("← Back"):
         st.session_state.clear()
         st.rerun()
@@ -289,10 +283,37 @@ def show_dashboard():
     if is_partner:
         with tab2:
             st.subheader("💡 How You Can Support Her")
-            with st.spinner("AI thinking..."):
-                advice = generate_ai_response(f"Give caring suggestions for a boyfriend. She is on cycle day {cycle_day} in {phase}. Health notes: {memory.get('health_notes', 'None')}")
-            st.markdown(advice)
+            st.markdown("**Answer these questions if you know how she is feeling today. If not, you can skip.**")
+
+            # Dynamic questions for Partner
+            with st.spinner("Preparing relevant questions..."):
+                partner_prompt = f"""Generate 2-3 simple, caring questions for a boyfriend whose partner is on cycle day {cycle_day} in {phase} phase.
+Health notes: {memory.get('health_notes', 'None')}
+Make questions easy to answer or skip. Format nicely with options."""
+                dynamic_partner_questions = generate_ai_response(partner_prompt)
+
+            st.markdown(dynamic_partner_questions)
+
+            partner_answers = st.text_area("Your answers (or write 'Skip' if you don't know):", height=150, key="partner_answers")
+
+            if st.button("Get Support Suggestions", type="primary"):
+                if "skip" in partner_answers.lower() or not partner_answers.strip():
+                    prompt = f"Give caring, general support suggestions for a boyfriend. His partner is on cycle day {cycle_day} in {phase} phase. Health notes: {memory.get('health_notes', 'None')}. Include gentle tips on what he can ask her."
+                else:
+                    prompt = f"Give personalised support suggestions for a boyfriend. His partner is on cycle day {cycle_day} in {phase} phase. Health notes: {memory.get('health_notes', 'None')}. Partner's observations: {partner_answers}"
+                
+                with st.spinner("Preparing suggestions..."):
+                    advice = generate_ai_response(prompt)
+                st.session_state.chat_history = [{"role": "assistant", "content": advice}]
+                st.rerun()
+
+            if st.session_state.chat_history:
+                st.markdown("---")
+                for msg in st.session_state.chat_history:
+                    if msg["role"] == "assistant":
+                        st.write(f"**AI Coach:** {msg['content']}")
     else:
+        # Women's AI Coach (dynamic questions)
         with tab2:
             st.subheader("😊 Log Today's Mood")
             mood = st.selectbox("How are you feeling today?", list(mood_map.keys()))
@@ -305,48 +326,41 @@ def show_dashboard():
             st.subheader("🤖 AI Coach")
             st.markdown("**Answer these questions to help the AI give more personalised suggestions.**")
 
-            # Smart Questions with Options
-            q1 = st.radio("How is your energy level today?", 
-                         ["High energy", "Moderate energy", "Low energy / Fatigued", "Other"], key="q1")
-            q1_other = st.text_input("If Other, please specify:", key="q1_other") if q1 == "Other" else ""
+            with st.spinner("Preparing personalised questions for your phase..."):
+                question_prompt = f"""Generate 3 smart, specific questions for a woman on cycle day {cycle_day} in {phase} phase.
+Health notes: {memory.get('health_notes', 'None')}
+Format each question with 3-4 options + Other."""
+                dynamic_questions = generate_ai_response(question_prompt)
 
-            q2 = st.radio("Are you experiencing any physical discomfort?", 
-                         ["No discomfort", "Mild cramps", "Moderate cramps / bloating", "Heavy flow or pain", "Other"], key="q2")
-            q2_other = st.text_input("If Other, please specify:", key="q2_other") if q2 == "Other" else ""
+            st.markdown(dynamic_questions)
 
-            q3 = st.radio("How is your mood/emotional state?", 
-                         ["Calm and positive", "Slightly irritable / emotional", "Anxious or low mood", "Other"], key="q3")
-            q3_other = st.text_input("If Other, please specify:", key="q3_other") if q3 == "Other" else ""
+            user_response = st.text_area("Your answers:", height=200)
 
             if st.button("Get Personalised Advice", type="primary"):
-                user_answers = f"Energy: {q1} {q1_other}. Discomfort: {q2} {q2_other}. Mood: {q3} {q3_other}."
-                prompt = f"""User is on cycle day {cycle_day} in {phase} phase.
+                if user_response.strip():
+                    full_prompt = f"""User is on cycle day {cycle_day} in {phase} phase.
 Health notes: {memory.get('health_notes', 'None')}
-User answers: {user_answers}
+User answers: {user_response}
 
-Give warm, practical, personalised suggestions and advice."""
-                
-                with st.spinner("AI Coach is preparing personalised advice..."):
-                    advice = generate_ai_response(prompt)
-                
-                st.session_state.chat_history = [{"role": "assistant", "content": advice}]
-                st.rerun()
+Give warm, practical, personalised advice."""
+                    with st.spinner("Preparing advice..."):
+                        advice = generate_ai_response(full_prompt)
+                    st.session_state.chat_history = [{"role": "assistant", "content": advice}]
+                    st.rerun()
 
-            # Conversational part after first advice
             if st.session_state.chat_history:
                 st.markdown("---")
-                st.markdown("**Continue the conversation with your AI Coach:**")
+                st.markdown("**Continue chatting with your AI Coach:**")
                 for msg in st.session_state.chat_history:
                     if msg["role"] == "user":
                         st.write(f"**You:** {msg['content']}")
                     else:
                         st.write(f"**AI Coach:** {msg['content']}")
 
-                follow_up = st.text_input("Ask anything else or follow up...")
+                follow_up = st.text_input("Ask a follow-up question...")
                 if st.button("Send Follow-up"):
                     if follow_up:
                         st.session_state.chat_history.append({"role": "user", "content": follow_up})
-                        save_ai_query(email, follow_up)
                         with st.spinner("Thinking..."):
                             answer = generate_ai_response(follow_up)
                         st.session_state.chat_history.append({"role": "assistant", "content": answer})
