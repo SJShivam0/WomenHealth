@@ -3,8 +3,11 @@ import sqlite3
 from datetime import datetime, timedelta, date
 import pandas as pd
 from openai import OpenAI
+import json
 
-# ===================== UI CONFIG =====================
+st.set_page_config(page_title="🌸 Women's Health AI", layout="centered", page_icon="🌸")
+
+# Hide default elements
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
@@ -13,9 +16,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="🌸 Women's Health AI", layout="centered", page_icon="🌸")
-
-# ===================== GROQ SETUP =====================
+# ===================== GROQ =====================
 if "GROQ" in st.secrets:
     groq_key = st.secrets["GROQ"]["API_KEY"]
 else:
@@ -31,39 +32,12 @@ groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_key
 conn = sqlite3.connect("app", check_same_thread=False)
 cursor = conn.cursor()
 
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        email TEXT PRIMARY KEY,
-        password TEXT,
-        full_name TEXT,
-        is_partner INTEGER DEFAULT 0
-    )
-""")
-
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS cycle_data (
-        email TEXT PRIMARY KEY,
-        last_period TEXT,
-        cycle_length INTEGER,
-        age INTEGER,
-        health_notes TEXT
-    )
-""")
-
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS mood_data (
-        email TEXT,
-        date TEXT,
-        mood TEXT,
-        score INTEGER,
-        cycle_day INTEGER,
-        phase TEXT,
-        reasons TEXT
-    )
-""")
+cursor.execute("CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, password TEXT, full_name TEXT, is_partner INTEGER DEFAULT 0)")
+cursor.execute("CREATE TABLE IF NOT EXISTS cycle_data (email TEXT PRIMARY KEY, last_period TEXT, cycle_length INTEGER, age INTEGER, health_notes TEXT)")
+cursor.execute("CREATE TABLE IF NOT EXISTS mood_data (email TEXT, date TEXT, mood TEXT, score INTEGER, cycle_day INTEGER, phase TEXT, reasons TEXT)")
 conn.commit()
 
-# ===================== SESSION STATE =====================
+# ===================== SESSION =====================
 if 'user' not in st.session_state:
     st.session_state.user = None
 if 'full_name' not in st.session_state:
@@ -75,7 +49,7 @@ if 'page' not in st.session_state:
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
-# ===================== HELPER FUNCTIONS =====================
+# ===================== HELPERS =====================
 def today():
     return datetime.today().date()
 
@@ -90,8 +64,7 @@ def days_to_next_period(last_date_str, cycle_length):
 def get_cycle_day(last_date_str, cycle_length):
     last = datetime.strptime(last_date_str, "%Y-%m-%d").date()
     days = (today() - last).days
-    if days < 0:
-        return 0
+    if days < 0: return 0
     return (days % cycle_length) + 1
 
 def get_phase(day):
@@ -129,16 +102,16 @@ def generate_ai_response(prompt):
     try:
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": "You are a caring, supportive women's health coach. Give practical and warm advice."},
+            messages=[{"role": "system", "content": "You are a caring, supportive women's health coach."},
                       {"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=500
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"⚠️ AI service is temporarily unavailable."
+        return f"⚠️ AI Error: {str(e)}"
 
-# ===================== LOGIN SCREEN =====================
+# ===================== LOGIN =====================
 def show_login():
     st.title("🌸 Women's Health AI")
     st.markdown("### Track your cycle • Get guidance • Support your partner")
@@ -158,7 +131,6 @@ def show_login():
         if email and password:
             cursor.execute("SELECT password, full_name, is_partner FROM users WHERE email=?", (email,))
             existing = cursor.fetchone()
-
             if existing:
                 if existing[0] == password:
                     st.session_state.user = email
@@ -211,7 +183,7 @@ def show_admin_panel():
         st.session_state.clear()
         st.rerun()
 
-# ===================== MAIN DASHBOARD =====================
+# ===================== DASHBOARD =====================
 def show_dashboard():
     email = st.session_state.user
     full_name = st.session_state.full_name
@@ -219,36 +191,41 @@ def show_dashboard():
 
     st.title(f"🌸 Welcome, {full_name}!")
 
+    # Sidebar - Fixed placement
     with st.sidebar:
         st.success(f"Logged in as **{full_name}**")
         if st.button("Logout"):
             st.session_state.clear()
             st.rerun()
 
-    memory = load_cycle(email)
-    if not memory:
+        memory = load_cycle(email)
+
+        sidebar_title = "📅 Your Partner's Information" if is_partner else "📅 Your Information"
+        with st.expander(sidebar_title, expanded=True):
+            default_date = datetime.strptime(memory["last_period_date"], "%Y-%m-%d").date() if memory else today()
+            last_date_input = st.date_input("Last Period Date", value=default_date, max_value=today())
+
+            cycle_length = st.number_input("Average Cycle Length (days)", 20, 45, value=memory["cycle_length"] if memory else 28)
+            age = st.number_input("Age", 13, 60, value=memory["age"] if memory else 25)
+            health_notes = st.text_area("Health History / Important Events (Helps AI give personalized suggestions)", 
+                                        value=memory["health_notes"] if memory else "",
+                                        placeholder="PCOS, thyroid, recent pregnancy, breastfeeding, medications, etc.")
+
+            if st.button("💾 Save Information", type="primary"):
+                if last_date_input:
+                    save_cycle(email, last_date_input, int(cycle_length), int(age), health_notes)
+                    st.success("✅ Information saved successfully!")
+                    st.rerun()
+
+    if not load_cycle(email):
         st.info("👉 Please fill your information from the sidebar and click **Save Information**.")
         st.stop()
 
+    memory = load_cycle(email)
     cycle_day = get_cycle_day(memory["last_period_date"], memory["cycle_length"])
     phase = get_phase(cycle_day)
     next_period = predict_next_period(memory["last_period_date"], memory["cycle_length"])
     days_left = days_to_next_period(memory["last_period_date"], memory["cycle_length"])
-
-    # Sidebar Form
-    sidebar_title = "📅 Your Partner's Information" if is_partner else "📅 Your Information"
-    with st.sidebar.expander(sidebar_title, expanded=True):
-        last_date_input = st.date_input("Last Period Date", value=datetime.strptime(memory["last_period_date"], "%Y-%m-%d").date(), max_value=today())
-        cycle_length = st.number_input("Average Cycle Length (days)", 20, 45, value=memory["cycle_length"])
-        age = st.number_input("Age", 13, 60, value=memory["age"])
-        health_notes = st.text_area("Health History / Important Events (Helps AI give personalized suggestions)", 
-                                    value=memory["health_notes"],
-                                    placeholder="PCOS, thyroid, recent pregnancy, breastfeeding, medications, etc.")
-
-        if st.button("💾 Save Information", type="primary"):
-            save_cycle(email, last_date_input, int(cycle_length), int(age), health_notes)
-            st.success("✅ Information saved successfully!")
-            st.rerun()
 
     if is_partner:
         st.info("👫 You are in **Partner Mode**")
@@ -267,16 +244,12 @@ def show_dashboard():
     if is_partner:
         with tab2:
             st.subheader("💡 How You Can Support Her")
-            st.markdown("**Answer if you know her current feelings, otherwise click Skip.**")
-            partner_input = st.text_area("Your observations:", height=120, placeholder="Type 'Skip' if you don't know")
+            partner_input = st.text_area("Your observations (or type 'Skip'):", height=120)
             if st.button("Get Support Suggestions", type="primary"):
-                prompt = f"Give caring suggestions for a boyfriend. His partner is on cycle day {cycle_day} in {phase}. Health notes: {memory.get('health_notes', 'None')}. Partner input: {partner_input or 'No specific input'}"
+                prompt = f"Give caring suggestions for a boyfriend. Partner is on cycle day {cycle_day} in {phase}. Health notes: {memory.get('health_notes', 'None')}. Input: {partner_input or 'No input'}"
                 with st.spinner("Thinking..."):
                     advice = generate_ai_response(prompt)
-                st.session_state.chat_history = [{"role": "assistant", "content": advice}]
-                st.rerun()
-            if st.session_state.chat_history:
-                st.write("**AI Coach:**", st.session_state.chat_history[0]["content"])
+                st.write(advice)
     else:
         with tab2:
             st.subheader("😊 Log Today's Mood")
@@ -288,45 +261,27 @@ def show_dashboard():
 
         with tab3:
             st.subheader("🤖 AI Coach")
-            st.markdown("**Answer these questions to help the AI give more personalised suggestions.**")
+            st.markdown("**Answer these questions to get personalised advice**")
 
-            # Dynamic Questions (Text + Manual Answer for stability)
-            with st.spinner("Creating questions based on your current phase..."):
-                q_prompt = f"""Create 3 relevant questions for a woman on cycle day {cycle_day} in {phase} phase.
-Health notes: {memory.get('health_notes', 'None')}.
-Provide 3-4 options for each question."""
+            with st.spinner("Preparing questions for your phase..."):
+                q_prompt = f"Create 3 relevant questions for cycle day {cycle_day} in {phase}. Health notes: {memory.get('health_notes', 'None')}. Give options for each."
                 questions_text = generate_ai_response(q_prompt)
 
             st.markdown(questions_text)
 
-            user_answers = st.text_area("Write your answers here:", height=250)
+            user_answers = st.text_area("Your answers:", height=250)
 
             if st.button("Get Personalised Advice", type="primary"):
-                if user_answers.strip():
-                    prompt = f"""User is on cycle day {cycle_day} in {phase} phase.
-Health notes: {memory.get('health_notes', 'None')}
-User's answers: {user_answers}
-
-Give warm, practical, personalised advice."""
-                    with st.spinner("Preparing personalised advice..."):
+                if user_answers:
+                    prompt = f"Cycle day {cycle_day}, phase: {phase}. Health notes: {memory.get('health_notes', 'None')}. User answers: {user_answers}. Give warm personalised advice."
+                    with st.spinner("Thinking..."):
                         advice = generate_ai_response(prompt)
                     st.session_state.chat_history = [{"role": "assistant", "content": advice}]
                     st.rerun()
 
             if st.session_state.chat_history:
                 st.markdown("---")
-                st.markdown("**Continue the conversation with AI Coach:**")
-                for msg in st.session_state.chat_history:
-                    st.write(f"**AI Coach:** {msg['content']}")
-
-                follow_up = st.text_input("Ask a follow-up question...")
-                if st.button("Send Follow-up"):
-                    if follow_up:
-                        st.session_state.chat_history.append({"role": "user", "content": follow_up})
-                        with st.spinner("Thinking..."):
-                            answer = generate_ai_response(follow_up)
-                        st.session_state.chat_history.append({"role": "assistant", "content": answer})
-                        st.rerun()
+                st.markdown("**AI Coach:** " + st.session_state.chat_history[0]["content"])
 
     st.caption("⚠️ This is not medical advice.")
 
