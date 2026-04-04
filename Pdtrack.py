@@ -2,12 +2,12 @@ import streamlit as st
 import sqlite3
 from datetime import datetime, timedelta, date
 import pandas as pd
-from openai import OpenAI
 import json
+from openai import OpenAI
 
 st.set_page_config(page_title="🌸 Women's Health AI", layout="centered", page_icon="🌸")
 
-# Hide default elements
+# Hide default UI
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
@@ -16,7 +16,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ===================== GROQ =====================
+# GROQ
 if "GROQ" in st.secrets:
     groq_key = st.secrets["GROQ"]["API_KEY"]
 else:
@@ -28,30 +28,23 @@ if not groq_key:
 
 groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_key)
 
-# ===================== DATABASE =====================
+# Database
 conn = sqlite3.connect("app", check_same_thread=False)
 cursor = conn.cursor()
-
 cursor.execute("CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, password TEXT, full_name TEXT, is_partner INTEGER DEFAULT 0)")
 cursor.execute("CREATE TABLE IF NOT EXISTS cycle_data (email TEXT PRIMARY KEY, last_period TEXT, cycle_length INTEGER, age INTEGER, health_notes TEXT)")
 cursor.execute("CREATE TABLE IF NOT EXISTS mood_data (email TEXT, date TEXT, mood TEXT, score INTEGER, cycle_day INTEGER, phase TEXT, reasons TEXT)")
 conn.commit()
 
-# ===================== SESSION =====================
-if 'user' not in st.session_state:
-    st.session_state.user = None
-if 'full_name' not in st.session_state:
-    st.session_state.full_name = None
-if 'is_partner' not in st.session_state:
-    st.session_state.is_partner = False
-if 'page' not in st.session_state:
-    st.session_state.page = "login"
-if 'chat_history' not in st.session_state:
-    st.session_state.chat_history = []
+# Session
+if 'user' not in st.session_state: st.session_state.user = None
+if 'full_name' not in st.session_state: st.session_state.full_name = None
+if 'is_partner' not in st.session_state: st.session_state.is_partner = False
+if 'page' not in st.session_state: st.session_state.page = "login"
+if 'chat_history' not in st.session_state: st.session_state.chat_history = []
 
-# ===================== HELPERS =====================
-def today():
-    return datetime.today().date()
+# Helpers
+def today(): return datetime.today().date()
 
 def predict_next_period(last_date_str, cycle_length):
     last = datetime.strptime(last_date_str, "%Y-%m-%d").date()
@@ -64,18 +57,13 @@ def days_to_next_period(last_date_str, cycle_length):
 def get_cycle_day(last_date_str, cycle_length):
     last = datetime.strptime(last_date_str, "%Y-%m-%d").date()
     days = (today() - last).days
-    if days < 0: return 0
-    return (days % cycle_length) + 1
+    return (days % cycle_length) + 1 if days >= 0 else 0
 
 def get_phase(day):
-    if day <= 5:
-        return "Menstrual Phase (Period / Rest Phase) 🩸"
-    elif day <= 13:
-        return "Follicular Phase (Growth & Energy Phase) 🌱"
-    elif day <= 16:
-        return "Ovulation Phase (Fertile Window) 🌼"
-    else:
-        return "Luteal Phase (Pre-Period Phase) 🌙"
+    if day <= 5: return "Menstrual Phase (Period / Rest Phase) 🩸"
+    elif day <= 13: return "Follicular Phase (Growth & Energy Phase) 🌱"
+    elif day <= 16: return "Ovulation Phase (Fertile Window) 🌼"
+    else: return "Luteal Phase (Pre-Period Phase) 🌙"
 
 def load_cycle(email):
     cursor.execute("SELECT last_period, cycle_length, age, health_notes FROM cycle_data WHERE email=?", (email,))
@@ -111,7 +99,7 @@ def generate_ai_response(prompt):
     except Exception as e:
         return f"⚠️ AI Error: {str(e)}"
 
-# ===================== LOGIN =====================
+# Login (unchanged)
 def show_login():
     st.title("🌸 Women's Health AI")
     st.markdown("### Track your cycle • Get guidance • Support your partner")
@@ -154,20 +142,14 @@ def show_login():
         else:
             st.error("Email and Password are required")
 
-# ===================== ADMIN =====================
+# Admin (simplified)
 def show_admin_login():
     st.title("🔐 Admin Login")
-    admin_email = st.text_input("Admin Email", "admin@yourapp.com")
-    admin_password = st.text_input("Admin Password", type="password")
-    if st.button("Login as Admin"):
-        if admin_email == "admin@yourapp.com" and admin_password == "admin12345":
-            st.session_state.user = admin_email
-            st.session_state.full_name = "Admin"
-            st.session_state.page = "admin_panel"
-            st.success("Admin Login Successful!")
-            st.rerun()
-        else:
-            st.error("Incorrect credentials")
+    if st.button("Login as Admin") and st.text_input("Admin Email", "admin@yourapp.com") == "admin@yourapp.com" and st.text_input("Admin Password", type="password") == "admin12345":
+        st.session_state.user = "admin@yourapp.com"
+        st.session_state.full_name = "Admin"
+        st.session_state.page = "admin_panel"
+        st.rerun()
     if st.button("← Back"):
         st.session_state.page = "login"
         st.rerun()
@@ -177,13 +159,12 @@ def show_admin_panel():
     cursor.execute("SELECT * FROM cycle_data")
     data = cursor.fetchall()
     if data:
-        df = pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"])
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"]), use_container_width=True)
     if st.button("← Back"):
         st.session_state.clear()
         st.rerun()
 
-# ===================== DASHBOARD =====================
+# ===================== DASHBOARD (Fixed Sidebar) =====================
 def show_dashboard():
     email = st.session_state.user
     full_name = st.session_state.full_name
@@ -191,7 +172,7 @@ def show_dashboard():
 
     st.title(f"🌸 Welcome, {full_name}!")
 
-    # Sidebar - Fixed placement
+    # Sidebar - Moved to top and simplified
     with st.sidebar:
         st.success(f"Logged in as **{full_name}**")
         if st.button("Logout"):
@@ -199,28 +180,27 @@ def show_dashboard():
             st.rerun()
 
         memory = load_cycle(email)
+        if not memory:
+            st.info("Fill information below")
+            st.stop()
 
         sidebar_title = "📅 Your Partner's Information" if is_partner else "📅 Your Information"
         with st.expander(sidebar_title, expanded=True):
-            default_date = datetime.strptime(memory["last_period_date"], "%Y-%m-%d").date() if memory else today()
+            default_date = datetime.strptime(memory["last_period_date"], "%Y-%m-%d").date()
             last_date_input = st.date_input("Last Period Date", value=default_date, max_value=today())
 
-            cycle_length = st.number_input("Average Cycle Length (days)", 20, 45, value=memory["cycle_length"] if memory else 28)
-            age = st.number_input("Age", 13, 60, value=memory["age"] if memory else 25)
-            health_notes = st.text_area("Health History / Important Events (Helps AI give personalized suggestions)", 
-                                        value=memory["health_notes"] if memory else "",
-                                        placeholder="PCOS, thyroid, recent pregnancy, breastfeeding, medications, etc.")
+            cycle_length = st.number_input("Average Cycle Length (days)", 20, 45, value=memory["cycle_length"])
+            age = st.number_input("Age", 13, 60, value=memory["age"])
+            health_notes = st.text_area("Health History (Helps AI give personalized suggestions)", 
+                                        value=memory["health_notes"],
+                                        placeholder="PCOS, thyroid, recent pregnancy, etc.")
 
             if st.button("💾 Save Information", type="primary"):
-                if last_date_input:
-                    save_cycle(email, last_date_input, int(cycle_length), int(age), health_notes)
-                    st.success("✅ Information saved successfully!")
-                    st.rerun()
+                save_cycle(email, last_date_input, int(cycle_length), int(age), health_notes)
+                st.success("✅ Saved!")
+                st.rerun()
 
-    if not load_cycle(email):
-        st.info("👉 Please fill your information from the sidebar and click **Save Information**.")
-        st.stop()
-
+    # Main content
     memory = load_cycle(email)
     cycle_day = get_cycle_day(memory["last_period_date"], memory["cycle_length"])
     phase = get_phase(cycle_day)
@@ -241,6 +221,7 @@ def show_dashboard():
         col3.metric("Next Period", next_period)
         st.metric("Days until next period", f"{days_left} days")
 
+    # Rest of tabs (Mood, AI Coach, Partner) remain the same as previous version
     if is_partner:
         with tab2:
             st.subheader("💡 How You Can Support Her")
@@ -262,15 +243,12 @@ def show_dashboard():
         with tab3:
             st.subheader("🤖 AI Coach")
             st.markdown("**Answer these questions to get personalised advice**")
-
-            with st.spinner("Preparing questions for your phase..."):
-                q_prompt = f"Create 3 relevant questions for cycle day {cycle_day} in {phase}. Health notes: {memory.get('health_notes', 'None')}. Give options for each."
+            with st.spinner("Preparing questions..."):
+                q_prompt = f"Create 3 relevant questions for cycle day {cycle_day} in {phase}. Health notes: {memory.get('health_notes', 'None')}. Give options."
                 questions_text = generate_ai_response(q_prompt)
-
             st.markdown(questions_text)
 
             user_answers = st.text_area("Your answers:", height=250)
-
             if st.button("Get Personalised Advice", type="primary"):
                 if user_answers:
                     prompt = f"Cycle day {cycle_day}, phase: {phase}. Health notes: {memory.get('health_notes', 'None')}. User answers: {user_answers}. Give warm personalised advice."
@@ -285,7 +263,7 @@ def show_dashboard():
 
     st.caption("⚠️ This is not medical advice.")
 
-# ===================== MAIN =====================
+# Main flow
 if st.session_state.page == "login":
     show_login()
 elif st.session_state.page == "admin_login":
