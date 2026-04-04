@@ -5,13 +5,23 @@ import pandas as pd
 import json
 from openai import OpenAI
 
-# ===================== Hide Streamlit Cloud Default Elements =====================
+# ===================== STRONGER HIDING OF STREAMLIT CLOUD ELEMENTS =====================
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         header {visibility: hidden;}
+        .stApp > header {display: none;}
         .stApp > header > div {display: none;}
+        
+        /* Hide Manage app button */
+        button[title="Manage app"] {display: none !important;}
+        .css-1v3fvcr {display: none !important;}
+        .st-emotion-cache-1v3fvcr {display: none !important;}
+        
+        /* Hide GitHub icon and other top right elements */
+        .stApp > header > div:first-child {display: none;}
+        .stApp > header > div > a {display: none;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -84,7 +94,7 @@ if 'is_partner' not in st.session_state:
 if 'page' not in st.session_state:
     st.session_state.page = "login"
 
-# ===================== HELPERS =====================
+# ===================== HELPERS (same as before) =====================
 def today():
     return datetime.today().date()
 
@@ -202,7 +212,7 @@ def show_admin_login():
     admin_password = st.text_input("Admin Password", type="password")
 
     if st.button("Login as Admin"):
-        if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":   # ← Change this password to something strong
+        if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":   # Change this to a strong password
             st.session_state.user = admin_email
             st.session_state.full_name = "Admin"
             st.session_state.page = "admin_panel"
