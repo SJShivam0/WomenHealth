@@ -5,6 +5,16 @@ import pandas as pd
 import json
 from openai import OpenAI
 
+# ===================== Hide Streamlit Cloud Default Elements =====================
+st.markdown("""
+    <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        .stApp > header > div {display: none;}
+    </style>
+""", unsafe_allow_html=True)
+
 st.set_page_config(page_title="🌸 Women's Health AI", layout="centered", page_icon="🌸")
 
 # ===================== GROQ SETUP =====================
@@ -142,7 +152,7 @@ def show_login():
     st.title("🌸 Women's Health AI")
     st.markdown("### Track your cycle • Get guidance • Support your partner")
 
-    # Admin Button at the top right
+    # Admin Button at top right
     col1, col2 = st.columns([4, 1])
     with col2:
         if st.button("🔐 Admin Login"):
@@ -184,7 +194,7 @@ def show_login():
         else:
             st.error("Email and Password are required")
 
-# ===================== ADMIN LOGIN SCREEN =====================
+# ===================== ADMIN LOGIN =====================
 def show_admin_login():
     st.title("🔐 Admin Login")
 
@@ -192,7 +202,7 @@ def show_admin_login():
     admin_password = st.text_input("Admin Password", type="password")
 
     if st.button("Login as Admin"):
-        if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":   # Change this password!
+        if admin_email == "admin@yourapp.com" and admin_password == "admin12345":   # ← Change this password to something strong
             st.session_state.user = admin_email
             st.session_state.full_name = "Admin"
             st.session_state.page = "admin_panel"
@@ -201,7 +211,7 @@ def show_admin_login():
         else:
             st.error("Incorrect Admin credentials")
 
-    if st.button("Back to User Login"):
+    if st.button("← Back to User Login"):
         st.session_state.page = "login"
         st.rerun()
 
@@ -235,7 +245,7 @@ def show_admin_panel():
         df_ai = pd.DataFrame(ai_data, columns=["Email", "Date", "Query"])
         st.dataframe(df_ai, use_container_width=True)
 
-    if st.button("Back to Login"):
+    if st.button("← Back to Login"):
         st.session_state.clear()
         st.rerun()
 
