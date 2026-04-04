@@ -5,19 +5,18 @@ import pandas as pd
 import json
 from openai import OpenAI
 
-# ===================== Hide Streamlit Default Elements =====================
+# Hide default Streamlit elements
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         header {visibility: hidden;}
-        .stApp > header > div {display: none;}
     </style>
 """, unsafe_allow_html=True)
 
 st.set_page_config(page_title="🌸 Women's Health AI", layout="centered", page_icon="🌸")
 
-# ===================== GROQ SETUP (No Banner) =====================
+# ===================== GROQ SETUP =====================
 if "GROQ" in st.secrets:
     groq_key = st.secrets["GROQ"]["API_KEY"]
 else:
@@ -73,7 +72,7 @@ cursor.execute("""
 """)
 conn.commit()
 
-# ===================== SESSION =====================
+# ===================== SESSION STATE =====================
 if 'user' not in st.session_state:
     st.session_state.user = None
 if 'full_name' not in st.session_state:
@@ -82,8 +81,10 @@ if 'is_partner' not in st.session_state:
     st.session_state.is_partner = False
 if 'page' not in st.session_state:
     st.session_state.page = "login"
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
 
-# ===================== HELPERS =====================
+# ===================== HELPER FUNCTIONS =====================
 def today():
     return datetime.today().date()
 
@@ -102,10 +103,14 @@ def get_cycle_day(last_date_str, cycle_length):
     return (days % cycle_length) + 1
 
 def get_phase(day):
-    if day <= 5: return "Menstrual 🩸"
-    elif day <= 13: return "Follicular 🌱"
-    elif day <= 16: return "Ovulation 🌼"
-    else: return "Luteal 🌙"
+    if day <= 5:
+        return "Menstrual Phase (Period / Rest Phase) 🩸"
+    elif day <= 13:
+        return "Follicular Phase (Growth & Energy Phase) 🌱"
+    elif day <= 16:
+        return "Ovulation Phase (Fertile Window) 🌼"
+    else:
+        return "Luteal Phase (Pre-Period Phase) 🌙"
 
 def load_cycle(email):
     cursor.execute("SELECT last_period, cycle_length, age, health_notes FROM cycle_data WHERE email=?", (email,))
@@ -137,7 +142,7 @@ def generate_ai_response(prompt):
     try:
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": "You are a caring, supportive women's health coach."},
+            messages=[{"role": "system", "content": "You are a caring, supportive women's health coach. Give practical advice and ask only 1-2 smart questions when necessary."},
                       {"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=400
@@ -151,14 +156,12 @@ def show_login():
     st.title("🌸 Women's Health AI")
     st.markdown("### Track your cycle • Get guidance • Support your partner")
 
-    # Small Admin Button at top right
     col1, col2 = st.columns([5, 1])
     with col2:
-        if st.button("🔐", help="Admin Login"):
+        if st.button("🔐 Admin"):
             st.session_state.page = "admin_login"
             st.rerun()
 
-    # Normal User Login
     full_name = st.text_input("Full Name (optional)")
     email = st.text_input("Email Address")
     password = st.text_input("Password", type="password")
@@ -193,15 +196,14 @@ def show_login():
         else:
             st.error("Email and Password are required")
 
-# ===================== ADMIN LOGIN =====================
+# ===================== ADMIN =====================
 def show_admin_login():
     st.title("🔐 Admin Login")
-
     admin_email = st.text_input("Admin Email", value="admin@yourapp.com")
     admin_password = st.text_input("Admin Password", type="password")
 
     if st.button("Login as Admin"):
-        if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":   # Change this password
+        if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":
             st.session_state.user = admin_email
             st.session_state.full_name = "Admin"
             st.session_state.page = "admin_panel"
@@ -214,41 +216,20 @@ def show_admin_login():
         st.session_state.page = "login"
         st.rerun()
 
-# ===================== ADMIN PANEL =====================
 def show_admin_panel():
     st.title("🔐 Admin Dashboard - All Data")
-
-    st.subheader("Registered Users")
-    cursor.execute("SELECT email, full_name, is_partner FROM users")
-    for u in cursor.fetchall():
-        st.write(f"**{u[1] or u[0]}** | {u[0]} | Partner: {'Yes' if u[2] else 'No'}")
-
-    st.subheader("Cycle Data")
+    st.subheader("Registered Users & Cycle Data")
     cursor.execute("SELECT * FROM cycle_data")
     data = cursor.fetchall()
     if data:
         df = pd.DataFrame(data, columns=["Email", "Last Period", "Cycle Length", "Age", "Health Notes"])
         st.dataframe(df, use_container_width=True)
-
-    st.subheader("Mood Logs")
-    cursor.execute("SELECT * FROM mood_data ORDER BY date DESC")
-    mood_data = cursor.fetchall()
-    if mood_data:
-        df_mood = pd.DataFrame(mood_data, columns=["Email", "Date", "Mood", "Score", "Cycle Day", "Phase", "Reasons"])
-        st.dataframe(df_mood, use_container_width=True)
-
-    st.subheader("AI Queries")
-    cursor.execute("SELECT * FROM ai_queries ORDER BY date DESC")
-    ai_data = cursor.fetchall()
-    if ai_data:
-        df_ai = pd.DataFrame(ai_data, columns=["Email", "Date", "Query"])
-        st.dataframe(df_ai, use_container_width=True)
-
+    
     if st.button("← Back"):
         st.session_state.clear()
         st.rerun()
 
-# ===================== USER DASHBOARD =====================
+# ===================== DASHBOARD =====================
 def show_dashboard():
     email = st.session_state.user
     full_name = st.session_state.full_name
@@ -264,15 +245,17 @@ def show_dashboard():
 
     memory = load_cycle(email)
 
-    with st.sidebar.expander("📅 Your Information", expanded=True):
+    # Sidebar Title for Partner vs Normal User
+    sidebar_title = "📅 Your Partner's Information" if is_partner else "📅 Your Information"
+    with st.sidebar.expander(sidebar_title, expanded=True):
         default_date = None if not memory else datetime.strptime(memory.get("last_period_date", "2025-01-01"), "%Y-%m-%d").date()
         last_date_input = st.date_input("Last Period Date", value=default_date, max_value=today())
 
         cycle_length = st.number_input("Average Cycle Length (days)", 20, 45, value=memory.get("cycle_length", 28) if memory else 28)
-        age = st.number_input("Your Age", 13, 60, value=memory.get("age", 25) if memory else 25)
-        health_notes = st.text_area("Health History / Important Events", 
+        age = st.number_input("Age", 13, 60, value=memory.get("age", 25) if memory else 25)
+        health_notes = st.text_area("Health History / Important Events (Helps AI give personalized suggestions)", 
                                     value=memory.get("health_notes", "") if memory else "",
-                                    placeholder="Recent pregnancy, delivery, breastfeeding, PCOS, etc.")
+                                    placeholder="PCOS, thyroid, recent pregnancy, breastfeeding, medications, etc.")
 
         if st.button("💾 Save Information", type="primary"):
             if last_date_input:
@@ -281,7 +264,7 @@ def show_dashboard():
                 st.rerun()
 
     if not memory:
-        st.info("👉 Please fill your information from the sidebar and click **Save Information**.")
+        st.info("👉 Please fill the information from the sidebar and click **Save Information**.")
         st.stop()
 
     cycle_day = get_cycle_day(memory["last_period_date"], memory["cycle_length"])
@@ -307,7 +290,7 @@ def show_dashboard():
         with tab2:
             st.subheader("💡 How You Can Support Her")
             with st.spinner("AI thinking..."):
-                advice = generate_ai_response(f"She is on cycle day {cycle_day} in {phase} phase.")
+                advice = generate_ai_response(f"Give caring suggestions for a boyfriend. She is on cycle day {cycle_day} in {phase}. Health notes: {memory.get('health_notes', 'None')}")
             st.markdown(advice)
     else:
         with tab2:
@@ -321,22 +304,32 @@ def show_dashboard():
         with tab3:
             st.subheader("🤖 Today's AI Coach")
             with st.spinner("AI thinking..."):
-                coach = generate_ai_response(f"User is on cycle day {cycle_day} in {phase} phase.")
+                coach = generate_ai_response(f"Give practical daily guidance and ask 1-2 smart questions if needed. User is on cycle day {cycle_day} in {phase} phase. Health notes: {memory.get('health_notes', 'None')}")
             st.markdown(coach)
 
         with tab4:
-            st.subheader("💬 Ask AI Anything")
-            question = st.text_area("Ask about diet, symptoms, cramps, energy, mood, etc.")
-            if st.button("Get Answer"):
+            st.subheader("💬 Ask AI")
+            for msg in st.session_state.chat_history:
+                if msg["role"] == "user":
+                    st.write(f"**You:** {msg['content']}")
+                else:
+                    st.write(f"**AI:** {msg['content']}")
+
+            question = st.text_input("Type your question here...")
+            if st.button("Send"):
                 if question:
+                    if 'chat_history' not in st.session_state:
+                        st.session_state.chat_history = []
+                    st.session_state.chat_history.append({"role": "user", "content": question})
                     save_ai_query(email, question)
                     with st.spinner("Thinking..."):
                         answer = generate_ai_response(question)
-                    st.markdown(answer)
+                    st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                    st.rerun()
 
     st.caption("⚠️ This is not medical advice.")
 
-# ===================== MAIN =====================
+# ===================== MAIN APP FLOW =====================
 if st.session_state.page == "login":
     show_login()
 elif st.session_state.page == "admin_login":
