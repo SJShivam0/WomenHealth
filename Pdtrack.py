@@ -5,32 +5,21 @@ import pandas as pd
 import json
 from openai import OpenAI
 
-# ===================== STRONGER HIDING OF STREAMLIT CLOUD ELEMENTS =====================
+# ===================== Hide Streamlit Default Elements =====================
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         header {visibility: hidden;}
-        .stApp > header {display: none;}
         .stApp > header > div {display: none;}
-        
-        /* Hide Manage app button */
-        button[title="Manage app"] {display: none !important;}
-        .css-1v3fvcr {display: none !important;}
-        .st-emotion-cache-1v3fvcr {display: none !important;}
-        
-        /* Hide GitHub icon and other top right elements */
-        .stApp > header > div:first-child {display: none;}
-        .stApp > header > div > a {display: none;}
     </style>
 """, unsafe_allow_html=True)
 
 st.set_page_config(page_title="🌸 Women's Health AI", layout="centered", page_icon="🌸")
 
-# ===================== GROQ SETUP =====================
+# ===================== GROQ SETUP (No Banner) =====================
 if "GROQ" in st.secrets:
     groq_key = st.secrets["GROQ"]["API_KEY"]
-    st.success("✅ Groq API key loaded from Secrets")
 else:
     groq_key = st.text_input("Enter your Groq API Key", type="password")
 
@@ -94,7 +83,7 @@ if 'is_partner' not in st.session_state:
 if 'page' not in st.session_state:
     st.session_state.page = "login"
 
-# ===================== HELPERS (same as before) =====================
+# ===================== HELPERS =====================
 def today():
     return datetime.today().date()
 
@@ -162,10 +151,10 @@ def show_login():
     st.title("🌸 Women's Health AI")
     st.markdown("### Track your cycle • Get guidance • Support your partner")
 
-    # Admin Button at top right
-    col1, col2 = st.columns([4, 1])
+    # Small Admin Button at top right
+    col1, col2 = st.columns([5, 1])
     with col2:
-        if st.button("🔐 Admin Login"):
+        if st.button("🔐", help="Admin Login"):
             st.session_state.page = "admin_login"
             st.rerun()
 
@@ -212,7 +201,7 @@ def show_admin_login():
     admin_password = st.text_input("Admin Password", type="password")
 
     if st.button("Login as Admin"):
-        if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":   # Change this to a strong password
+        if admin_email == "shivam_j1@ms.iitr.ac.in" and admin_password == "Alice@1510rke202020!":   # Change this password
             st.session_state.user = admin_email
             st.session_state.full_name = "Admin"
             st.session_state.page = "admin_panel"
@@ -221,7 +210,7 @@ def show_admin_login():
         else:
             st.error("Incorrect Admin credentials")
 
-    if st.button("← Back to User Login"):
+    if st.button("← Back"):
         st.session_state.page = "login"
         st.rerun()
 
@@ -255,7 +244,7 @@ def show_admin_panel():
         df_ai = pd.DataFrame(ai_data, columns=["Email", "Date", "Query"])
         st.dataframe(df_ai, use_container_width=True)
 
-    if st.button("← Back to Login"):
+    if st.button("← Back"):
         st.session_state.clear()
         st.rerun()
 
